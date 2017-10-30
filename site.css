@@ -1,0 +1,67 @@
+﻿ 
+.cdw_form {
+    margin: 5px
+}
+.form-group {
+    margin: 4px
+}
+.cdw_button {
+    -webkit-appearance: button;
+    cursor: pointer;
+    padding: 8px 22px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: inherit;
+    border-radius: 4px;
+    *display: inline; /* for IE7*/
+    position: relative;
+    width: 140px;
+ 
+}
+.cdw_input {
+    border-radius: 1px;
+    height: 25px;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    min-width: 220px;
+    margin-bottom: 5px;
+    display: inline-block;
+    vertical-align: middle;
+    margin-left: 10px;
+   
+}.cdw_select {
+    border-radius: 1px;
+    height: 29px;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    min-width: 223px;
+    margin-bottom: 5px;   
+    margin-left: 10px; 
+     vertical-align: middle;
+
+}
+.cdw_label {
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    display: inline-block;
+    display:inline-block;
+    *display: inline;     /* for IE7*/
+    zoom:1;              /* for IE7*/
+    float: left;
+    padding-top: 5px;
+    text-align: right;
+    width: 140px;
+}
+.cdw_error {
+    display: none;
+    color: red;
+    font-size: 14px;
+}
+
+.cdw_padd {
+    padding-left: 5px;
+}
