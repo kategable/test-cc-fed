@@ -1,15 +1,16 @@
 "use strict";
 (function cdwloader() {
 
+    var server = document.querySelector('script[src$="cdw.partners.bootstrap.js"]').getAttribute('src');
+    var name = server.split('/').pop();
+    server = server.replace('/js/' + name, "");
+    var testServer = server;
+    var liveServer = server;
 
-    // var testServer = "https://localhost:44390";
-    var testServer = "http://localhost:54895";
-    var liveServer = "https://somepartnersapiserverurl";//TODO: change to live server
     var action = "/payments/_authorize";
     var api = new ApiModule(testServer, liveServer, action);
 
     var main = function () {
-
         api.loadForm();
     }
 
@@ -25,8 +26,8 @@
 })();
 
 function ApiModule(test, live, action) {
-    var formId;
-    var btnId = '';
+
+
     var error = '';
     var creditCardDom;
     var $container;
@@ -36,11 +37,11 @@ function ApiModule(test, live, action) {
     var today = new Date().getFullYear();
     for (var i = today; i <= today + 10; i++) years.push(i);
     var controls = [
-        { Name: 'Number', Lable: 'Credit Card Number', Type: "input" },
-        { Name: 'Name', Lable: 'Full Name', Type: "input" },
-        { Name: 'ExpirationMonth', Lable: 'MM', Type: "combo", Values: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'] },
-        { Name: 'ExpirationYear', Lable: 'YYYY', Type: "combo", Values: years },
-        { Name: 'CVV', Lable: 'CVV', Type: "input" }
+        { Name: 'Number', Lable: 'Credit Card Number', Type: "input", Validation: { Type: "numbers", Length: 12, MaxLength: -1 } },
+        { Name: 'Name', Lable: 'Full Name', Type: "input", Validation: { Type: "any", Length: 3, MaxLength: -1 } },
+        { Name: 'ExpirationMonth', Lable: 'MM/YYYY', Type: "combo", Values: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'], Validation: { Type: "numbers", Length: 1, MaxLength: -1 } },
+        { Name: 'ExpirationYear', Lable: '', Type: "combo", Values: years, Validation: { Type: "numbers", Length: 3, MaxLength: -1 } },
+        { Name: 'CVV', Lable: 'CVV', Type: "input", Validation: { Type: "numbers", Length: 2, MaxLength: 5 } }
     ];
 
     var builder = new RequestBuilder(test, live, action);
@@ -79,8 +80,8 @@ function ApiModule(test, live, action) {
     }
 
     function addFormElements() {
-        formId = 'cdw_form_' + new Date().getTime();
-        btnId = 'cdw_btn' + new Date().getTime();
+
+        var btnId = 'cdw_btn';
 
         //add box     
         var box = '<div class="cdw_form"></div>';
@@ -90,43 +91,62 @@ function ApiModule(test, live, action) {
 
         //add conrols to box
         for (var i = 0; i < controls.length; i++) {
-            $box.append(domControlsLoader.initControl(controls[i]));
+            var ctr = domControlsLoader.initControl(controls[i]);
+            $box.append(ctr);
+            if (controls[i].Validation.Type != "numbers") {
+                continue;
+            }
+            $("#cdw_" + controls[i].Name).keydown(function (e) {
+                // Allow: backspace, delete, tab, escape, enter and .
+                if ($.inArray(e.keyCode, [46, 8, 9, 27, 13, 110, 190]) !== -1 ||
+                    // Allow: Ctrl+A, Command+A
+                    (e.keyCode === 65 && (e.ctrlKey === true || e.metaKey === true)) ||
+                    // Allow: home, end, left, right, down, up
+                    (e.keyCode >= 35 && e.keyCode <= 40)) {
+                    // let it happen, don't do anything
+                    return;
+                }
+                // Ensure that it is a number and stop the keypress
+                if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105) || ($(this).val().length > $(this).attr('maxlength'))) {
+                    e.preventDefault();
+                }
+            });
         }
         //add button to box
         if (!request.hidebutton) {
-            $box.append('<input id=' + btnId + ' type="button" class="cdw_button" value="Validate">');
+            $box.append('<div><input id=' + btnId + ' type="button" class="cdw_button" value="Validate"></div>');
             $("#" + btnId).on('click', submitForm);
             $('body').keyup(function (event) {
                 if (event.keyCode === 13) {
                     submitForm();
                 }
             });
-        }
-        else//or use partner's button
+        } else //or use partner's button
         {
             $("#" + request.partnerbutton).on('click', submitForm);
         }
-
+        $box.append('<div class="cdw_validations"></div>');
         //get all controls for later
         creditCardDom = domControlsLoader.creditCardDom(controls);
+
     }
+
 
     function submitForm() {
 
+        $(".cdw_validations").hide();
+        $(".cdw_validations").html('');
         //validate input
-        var isvalid = domValidator.process($);
+        var isvalid = domValidator.process(creditCardDom, controls);
 
         //if invalid show it
         if (!isvalid) {
             return false;
 
         }
-        //if valid call partners API _authorize payment
-        //on success make read only form
-        //set GUID somewhere : where?
         var cc = {};
         for (var i = 0; i < controls.length; i++) {
-            cc[controls[i].Name] = creditCardDom[i].val();
+            cc[controls[i].Name] = $.trim(creditCardDom[i].val());
         }
         var pos = '';
         getLocation();
@@ -147,8 +167,13 @@ function ApiModule(test, live, action) {
 
 
             function showPosition(position) {
-                pos = "Latitude: " + position.coords.latitude + " Longitude: " + position.coords.longitude;
+                pos = position.coords.latitude + " " + position.coords.longitude;
             }
+        }
+
+
+        if ($("#" + request.callbackelement).length > 0) {
+            $("#" + request.callbackelement).html("loading");
         }
         $.ajax({
             type: "POST",
@@ -160,22 +185,29 @@ function ApiModule(test, live, action) {
 
             },
             error: function (err) {
-                sendCallBack("error");
-                if (err.statusText === "Unauthorized") {
+                // sendCallBack("error");
+                if (err.status === 401) {
                     sendCallBack("Unauthorized");
                     return;
                 }
-                var data = err.responseJSON;
-                for (var j = 0; j < data.length; j++) {
-                    var ctr = creditCardDom[data[j]];//TODO; ned to have good fields
-                    ctr = { "Field": "Number", "Message": "Invalid Credit Card" };
-                    if ($("#cdw_" + ctr.Field).length) {
-
-                        $(".cdw_val" + ctr.Field).show();
-                        $(".cdw_val" + ctr.Field).html(data[j].Message);
-                    }
+                if (err.status !== 400) {
+                    sendCallBack("error");
+                    return;
                 }
-
+                var data = err.responseJSON;
+                if (data === undefined) {
+                    sendCallBack("error");
+                    return;
+                }
+                var html = [];
+                for (var j = 0; j < data.length; j++) {
+                    html.push(data[j].Message);
+                }
+                $(".cdw_validations").show();
+                $(".cdw_validations").html(html.join("<br>"));
+                if ($("#" + request.callbackelement).length > 0) {
+                    $("#" + request.callbackelement).html("");
+                }
             },
             beforeSend: function (xhr) {
                 xhr.setRequestHeader('Authorization', 'Bearer ' + request.token);
@@ -190,19 +222,19 @@ function ApiModule(test, live, action) {
 
     function isRequestValid() {
         //   return true;
-        //if (window.location.protocol != "https:") {
-        //    error = "can not be used over http";
-        //    return false;
-        //}
-        if (request.element == undefined || request.element.length <= 0) {
+        if (window.location.protocol !== "https:") {
+            error = "can not be used over http";
+            return false;
+        }
+        if (request.element === undefined || request.element.length <= 0) {
             error = "element needs to be provided as a ' data-element'";
             return false;
         }
-        if (request.token == undefined || request.token.length <= 0) {
+        if (request.token === undefined || request.token.length <= 0) {
             error = "token needs to be provided as a 'data-key'";
             return false;
         }
-        if (request.transactionId == undefined || request.transactionId.length <= 0) {
+        if (request.transactionId === undefined || request.transactionId.length <= 0) {
             error = "transactionId needs to be provided as a 'data-transaction-id'";
             return false;
         }
@@ -214,7 +246,7 @@ function ApiModule(test, live, action) {
         } else {//bad data
             request.hidebutton = false;
         }
-        if (request.hidebutton === true && request.partnerbutton == undefined) {
+        if (request.hidebutton === true && request.partnerbutton === undefined) {
             request.hidebutton = false;
         }
         return true;
@@ -287,44 +319,37 @@ var cssLoader = (function () {
 var domValidator = (function () {
 
     return {
-        process: function _process($) {
+        process: function _process(dom, controls) {
             //validate input
             var isvalid = true;
-            var ccNumber = $("#cdw_Number").val();
-            var name = $("#cdw_Name").val();
-            var mm = $("#cdw_ExpirationMonth").val();
-            var yy = $("#cdw_ExpirationYear").val();
-            var cvv = $("#cdw_CVV").val();
-
-            $(".cdw_error").hide();
-
-            if (ccNumber.length < 12) {
-                $(".cdw_valNumber").html("Number is required > 12");
-
-                $(".cdw_valNumber").show();
-                isvalid = false;
+            var reg = new RegExp(/^\d+$/);
+            var html = [];
+            for (var i = 0; i < controls.length; i++) {
+                var cc = controls[i];
+                var value = dom[i].val();
+                if (value.length === 0) {
+                    html.push(cc.Name + " is required");
+                    isvalid = false;
+                    continue;
+                }
+                if (cc.Validation.Type === "numbers") {
+                    if (!reg.test(value)) {
+                        html.push(cc.Name + " must be a numeric");
+                        isvalid = false;
+                        continue;
+                    }
+                }
+                if (cc.Validation.Length > 0) {
+                    if (value.length < cc.Validation.Length) {
+                        html.push(cc.Name + " must be > " + cc.Validation.Length);
+                        isvalid = false;
+                        continue;
+                    }
+                }
             }
-            if (name.length < 3) {
-                $(".cdw_valName").html("Name is required");
-                $(".cdw_valName").show();
-                isvalid = false;
-            }
-            if (mm.length < 1 || mm < 1 || mm > 12) {
-                $(".cdw_valExpirationMonth").html("MM is required");
-                $(".cdw_valExpirationMonth").show();
-                isvalid = false;
-            }
-            if (yy.length < 4 || yy < new Date().getYear()) {
-                $(".cdw_valExpirationYear").html("YYYY is required");
-                $(".cdw_valExpirationYear").show();
-
-                isvalid = false;
-            }
-            if (cvv.length < 1 || cvv < 1) {
-                $(".cdw_valCVV").html("CVV is required");
-
-                $(".cdw_valCVV").show();
-                isvalid = false;
+            if (!isvalid) {
+                $(".cdw_validations").html(html.join("<br>"))
+                $(".cdw_validations").show();
             }
 
             return isvalid;
@@ -356,7 +381,7 @@ var domControlsLoader = (function () {
 
         }
         if (control.Type === 'input') {
-            return initInputBox(control.Name, control.Lable);
+            return initInputBox(control);
         }
     }
 
@@ -367,28 +392,33 @@ var domControlsLoader = (function () {
         for (var i = 0; i < values.length; i++) {
             options = options + ' <option value="' + values[i] + '">' + values[i] + '</option>';
         }
+        var labelCtr = "";
+        if (label.length > 0) {
+            labelCtr = '<label class="cdw_label" for="' + id + '">' + label + '</label>';
+        }
         var html =
             '<div class="form-group ' +
-            className +
-            '">' +
-            '<label class="cdw_label" for="' + id + '">' + label + ':</label>' +
+            className + '">' + labelCtr +
             '<select id=' + id + ' class=cdw_select >' + options + '</select>' +
             '<span class=" cdw_error cdw_padd cdw_val' + controlName + '">*</span>' +
             '</div>';
         return html;
     }
 
-    function initInputBox(controlName, label) {
-        var id = "cdw_" + controlName;
-        var className = "cdw_cc" + controlName;
-
+    function initInputBox(control) {
+        var id = "cdw_" + control.Name;
+        var className = "cdw_cc" + control.Name;
+        var maxlength = '';
+        if (control.Validation.MaxLength > 0) {
+            maxlength = ' maxlength = "' + control.Validation.MaxLength + '" ';
+        }
         var html =
             '<div class="form-group ' +
             className +
             '">' +
-            '<label class="cdw_label" for="' + id + '">' + label + ':</label>' +
-            '<input type="text" class="cdw_input" id="' + id + '" placeholder="' + label + '" required/> ' +
-            '<span class="cdw_error cdw_val' + controlName + '">*</span>' +
+            '<label class="cdw_label" for="' + id + '">' + control.Lable + '</label>' +
+            '<input type="text" class="cdw_input" id="' + id + '" placeholder="' + control.Lable + '"' + maxlength + ' required/> ' +
+            '<span class="cdw_error cdw_val' + control.Name + '">*</span>' +
             '</div>';
         return html;
 
