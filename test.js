@@ -1,19 +1,18 @@
 "use strict";
+
+var cdwgapi = window.cdwgapi = window.cdwgapi || {};
+cdwgapi._bs = new Date().getTime();
 (function cdwloader() {
 
-    var server = document.querySelector('script[src$="cdw.partners.bootstrap.js"]').getAttribute('src');
+    var server = document.querySelector('script[src$="test.js"]').getAttribute('src');
     var name = server.split('/').pop();
-    server = server.replace('/js/' + name, "");
-    var testServer = server;
-    var liveServer = server;
+    server = server.replace('/pci/js/' + name, "");
 
     var action = "/payments/_authorize";
-    var api = new ApiModule(testServer, liveServer, action);
-
+    var api = new ApiModule(server, action);
     var main = function () {
         api.loadForm();
     }
-
 
     if (window.jQuery === undefined || window.jQuery.fn.jquery !== '3.1.1') {
         api.loadScript('https://cdnjs.cloudflare.com/ajax/libs/jquery/3.1.1/jquery.min.js', function () {
@@ -26,9 +25,9 @@
     }
 })();
 
-function ApiModule(test, live, action) {
-
-
+function ApiModule(server, action) {
+    cdwgapi.sumbitForm = submitForm;
+    var authorizing = false;
     var error = '';
     var creditCardDom;
     var $container;
@@ -45,7 +44,7 @@ function ApiModule(test, live, action) {
         { Name: 'CVV', Lable: 'CVV', Type: "input", Validation: { Type: "numbers", Length: 2, MaxLength: 5 } }
     ];
 
-    var builder = new RequestBuilder(test, live, action);
+    var builder = new RequestBuilder(server, action);
     var request = builder.process();
 
     var api = {
@@ -64,7 +63,7 @@ function ApiModule(test, live, action) {
         document.body.appendChild(js);
     }
 
-    api.loadForm = function () {
+    api.loadForm = function loadForm() {
         jQuery(document).ready(function ($) {
             $container = $("#" + request.element);
 
@@ -116,6 +115,7 @@ function ApiModule(test, live, action) {
         //add button to box
         if (!request.hidebutton) {
             $box.append('<div><input id=' + btnId + ' type="button" class="cdw_button" value="Validate"></div>');
+
             $("#" + btnId).on('click', submitForm);
             $('body').keyup(function (event) {
                 if (event.keyCode === 13) {
@@ -124,7 +124,11 @@ function ApiModule(test, live, action) {
             });
         } else //or use partner's button
         {
-            $("#" + request.partnerbutton).on('click', submitForm);
+            if ($("#" + request.partnerbutton)) {
+
+                $("#" + request.partnerbutton).on('click', submitForm);
+            }
+
         }
         $box.append('<div class="cdw_validations"></div>');
         //get all controls for later
@@ -135,91 +139,85 @@ function ApiModule(test, live, action) {
 
     function submitForm() {
 
-        $(".cdw_validations").hide();
-        $(".cdw_validations").html('');
-        //validate input
-        var isvalid = domValidator.process(creditCardDom, controls);
+        return new Promise((resolve, reject) => {
+            if (authorizing) {
+                reject("Loading previous request");
+                return;
+            }
+            $(".cdw_validations").hide();
+            $(".cdw_validations").html('');
+            //validate input
+            var isvalid = domValidator.process(creditCardDom, controls);
 
-        //if invalid show it
-        if (!isvalid) {
-            return false;
-
-        }
-        var cc = {};
-        for (var i = 0; i < controls.length; i++) {
-            cc[controls[i].Name] = $.trim(creditCardDom[i].val());
-        }
-        var pos = '';
-        getLocation();
-        var data = {
-            TransactionId: request.transactionId,
-            IpAddress: navigator.ipAddress,
-            GeoLocation: pos,
-            UserAgent: navigator.userAgent,
-            CreditCard: cc
-        };
-
-        function getLocation() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(showPosition);
-            } else {
-                pos = "Geolocation is not supported by this browser.";
+            //if invalid show it
+            if (!isvalid) {
+                reject($(".cdw_validations").html());
+                return;
+            }
+            var cc = {};
+            for (var i = 0; i < controls.length; i++) {
+                cc[controls[i].Name] = $.trim(creditCardDom[i].val());
             }
 
+            var data = {
+                TransactionId: request.transactionId,
+                UserAgent: navigator.userAgent,
+                CreditCard: cc
+            };
 
-            function showPosition(position) {
-                pos = position.coords.latitude + " " + position.coords.longitude;
+
+            if ($("#" + request.callbackelement).length > 0) {
+                $("#" + request.callbackelement).html("loading");
             }
-        }
+            authorizing = true;
+            $.ajax({
+                type: "POST",
+                url: request.authorize,
+                dataType: "json",
+                data: data,
+                success: function (result) {
+                    sendCallBack(result.ReferenceNumber);
+                    resolve(result.ReferenceNumber);
+                },
+                error: function (err) {
 
+                    if (err.status === 401) {
+                        sendCallBack("Unauthorized");
+                        reject("Unauthorized");
+                        return;
+                    }
+                    if (err.status !== 400) {
+                        sendCallBack("Error");
+                        reject("Error");
+                        return;
+                    }
+                    var data = err.responseJSON;
+                    if (data === undefined) {
+                        sendCallBack("Error");
+                        reject("Error");
+                        return;
+                    }
+                    var html = [];
+                    for (var j = 0; j < data.length; j++) {
+                        html.push(data[j].Message);
+                    }
+                    $(".cdw_validations").show();
+                    $(".cdw_validations").html(html.join("<br>"));
+                    if ($("#" + request.callbackelement).length > 0) {
+                        $("#" + request.callbackelement).html("");
+                    }
+                    reject($(".cdw_validations").html());
 
-        if ($("#" + request.callbackelement).length > 0) {
-            $("#" + request.callbackelement).html("loading");
-        }
-        $.ajax({
-            type: "POST",
-            url: request.authorize,
-            dataType: "json",
-            data: data,
-            success: function (result) {
-                sendCallBack(result.TransactionId);
-
-            },
-            error: function (err) {
-                // sendCallBack("error");
-                if (err.status === 401) {
-                    sendCallBack("Unauthorized");
-                    return;
+                },
+                complete: function () {
+                    authorizing = false;
+                },
+                beforeSend: function (xhr) {
+                    xhr.setRequestHeader('Authorization', 'Bearer ' + request.token);
                 }
-                if (err.status !== 400) {
-                    sendCallBack("error");
-                    return;
-                }
-                var data = err.responseJSON;
-                if (data === undefined) {
-                    sendCallBack("error");
-                    return;
-                }
-                var html = [];
-                for (var j = 0; j < data.length; j++) {
-                    html.push(data[j].Message);
-                }
-                $(".cdw_validations").show();
-                $(".cdw_validations").html(html.join("<br>"));
-                if ($("#" + request.callbackelement).length > 0) {
-                    $("#" + request.callbackelement).html("");
-                }
-            },
-            beforeSend: function (xhr) {
-                xhr.setRequestHeader('Authorization', 'Bearer ' + request.token);
-            }
+            });
         });
-
-
-        return false;
-
-
-    };
+    }
 
     function isRequestValid() {
         //   return true;
@@ -258,22 +256,21 @@ function ApiModule(test, live, action) {
             $("#" + request.callbackelement).html(msg);
         }
 
+
     }
 
     return api;
 
 };
 
-function RequestBuilder(test, live, action) {
-    var _test = test;
-    var _live = live;
+function RequestBuilder(server, action) {
+
     var _action = action;
     return {
         process: function _process() {
             var request = {};
-            var scriptTag = document.querySelector('script');
+            var scriptTag = document.querySelector('script[src$="test.js"]');
             request.token = scriptTag.getAttribute('data-key');
-            request.reach = scriptTag.getAttribute('data-reach');
             request.client = scriptTag.getAttribute('data-name');
             request.element = scriptTag.getAttribute('data-element');
             request.callbackelement = scriptTag.getAttribute('data-callback-element');
@@ -281,12 +278,9 @@ function RequestBuilder(test, live, action) {
             request.hidebutton = scriptTag.getAttribute('data-no-button');
             request.partnerbutton = scriptTag.getAttribute('data-my-button');
 
-            request.server = _test; //default
+            request.server = server;
 
-            if (request.reach === 'pk_live') {
-                request.server = _live;
-            }
-            request.sitecss = request.server + "/css/site.css";
+            request.sitecss = request.server + "/pci/css/site.css";
             request.authorize = request.server + _action;
 
             return request;

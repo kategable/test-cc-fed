@@ -5,27 +5,56 @@
     <title>Partner's Test Checkout Page</title>
 </head>
 <body>
+    <style>
+        .cdw_validations {
+            display: none !important
+        }
+    </style>
     <h1>Partner's Cart</h1>
 
     <div id="cdw-container"></div>
-    <div id="cdw-callback"></div>
-    <!--<input type="button" id="buttonId" value="This is partners button Submit"/>  data-transaction-id="7c9e6679-7425-40de-944b-e07fc1f90ae7">-->
-<!--  data-no-button="true" -->
-<!--"https://apidev.corp.cdw.com/external/v2.3/partners/js/cdw.partners.bootstrap.js"-->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/1.4.4/jquery.js"></script>
-<script type="text/javascript" async
-        src="https://localhost:44366/js/cdw.partners.bootstrap.js"
-            data-reach="pk_test"
-            data-key="87a72aace1c84762bfb32fe2af155b58"
-            data-name="apple.com"
+    <div style="color: blue" id="myval"></div>
+    <input type="button" id="partnerbuttonId" value="Submit" />
+    <!-- data-transaction-id="7c9e6679-7425-40de-944b-e07fc1f90ae7">
+    data-my-button="partnerbuttonId"-->
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+    <script type="text/javascript" async
+            src="https://localhost:44366/pci/js/cdw.partners.bootstrap.js"
+            data-key="f0edd1916e544c35b27aa168509faa8d"
             data-element="cdw-container"
-            data-callback-element="cdw-callback"
-            data-no-button="false"
-            data-my-button="buttonId"
-            data-transaction-id="7c9e6679-7425-40de-944b-e07fc1f90ae7">
-</script> 
-  
- 
-  
+            data-no-button="true"
+            data-transaction-id="7c9e6679-7425-40de-944b-e07fc1f90ae7" onload="scriptLoaded();">
+    </script>
+    <!--<script type="text/javascript" async
+            src="https://localhost:44366/pci/js/cdw.partners.bootstrap.js"
+            data-key="078f5818d60c4856bb4f62929fb2bef7"
+            data-element="cdw-container"
+            data-transaction-id="7c9e6679-7425-40de-944b-e07fc1f90ae7"
+            data-callback-element="myval">
+    </script>-->
+
+    <script type="text/javascript">
+
+        var scriptLoaded = function () {
+
+            $("#partnerbuttonId").on('click', function (e) {
+                $("#myval").html("loading...")
+                cdwgapi.sumbitForm().then(function (result) {
+                    console.log(result); // "Stuff worked!"
+                    $("#myval").html(result)
+                },
+                    function (err) {
+                        console.log(err); // Error: "It broke"
+                        $("#myval").html(err)
+                        if (err.statusText) {
+                            $("#myval").html(err.statusText);
+                        }
+                    });
+            });
+        }
+
+
+    </script>
 </body>
 </html>
